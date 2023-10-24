@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
-
+import torch.nn.functional as F
 # Load your data and preprocess it as needed.
 # Assuming you have X_train, y_train, X_test, and y_test as PyTorch tensors or NumPy arrays.
 
@@ -95,3 +95,103 @@ def NetworkHousePricePredict(X_train,y_train,X_test,y_test,EPOCH,BATCH=32):
     print(f"Network Mean Absolute Error (MAE): {mae}")
     print(f"Network R-squared (R2) Score: {r2}")
     plt.show()
+
+## follow is for sentimennt analysis with pretrained word vector, I need to build the neural network
+class SentimentNeuralNetwork(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(SentimentNeuralNetwork, self).__init__()
+        self.hidden_layer = nn.Linear(input_size, hidden_size)
+        self.output_layer = nn.Linear(hidden_size, 1)
+        self.sigmoid = nn.Sigmoid()
+    
+    def forward(self, x):
+        x = self.hidden_layer(x)
+        x = F.relu(x)                    # nonlinear activation, try tanh perhaps? 
+        x = self.output_layer(x)
+        x = self.sigmoid(x)
+        return x
+def Sentimenttrainingloop(train_data):
+    # Load your training and testing data, and apply text_transform to convert text to indices
+    # Initialize the model and other hyperparameters
+    input_size = 50  # Assuming your input data is of size 256
+    hidden_size = 32
+    learning_rate = 0.01
+    num_epochs = 200
+    print("Start training:")
+    model = SentimentNeuralNetwork(input_size, hidden_size)
+    criterion = nn.BCELoss()  # Binary Cross-Entropy Loss
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # Training loop
+    train_losses = []
+    for epoch in range(num_epochs):
+        for data, labels in train_data:  # You'll need to adapt this to your data loading setup
+            optimizer.zero_grad()
+            outputs = model(data)
+            #print("outputs.dtye=",outputs.dtype)
+            outputs = outputs.view(-1)
+            #print("labels.dtye=",labels.dtype)
+            loss = criterion(outputs, labels.float())
+            loss.backward()
+            optimizer.step()
+        if(epoch%20==0):
+            print(f"{epoch}/{num_epochs},losses:{loss.item()}")
+        train_losses.append(loss.item())
+
+    return model,train_losses
+
+    # Print or log the loss for monitoring
+def SentimentValidFn(model,test_data):
+    # Testing loop
+    correct = 0
+    total = 0
+    predicted=[]
+    with torch.no_grad():
+        for data, labels in test_data:  # Adjust this to your test data
+            print(f"labels={labels.size()[0]}")
+            outputs = model(data)
+            outputs = outputs.view(-1)
+            predicted = (outputs > 0.5).float()  # Convert to 0 or 1 based on a threshold
+            print(f"predicted.size={predicted.size()}")
+            total += labels.size()[0]
+            #print("predicted == labels=",predicted == labels)
+            correct += (predicted == labels).sum().item()
+    print(f"correct={correct},total={total}")
+    accuracy = 100 * correct / total
+    print('Accuracy on test data: {}%'.format(accuracy))
+    return predicted
+# Confusion draw function
+def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion Matrix', cmap=plt.cm.Blues):
+    import itertools
+    """
+    绘制混淆矩阵
+    :param cm: 混淆矩阵
+    :param classes: 类别标签
+    :param normalize: 是否归一化
+    :param title: 图表标题
+    :param cmap: 颜色图谱
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+    plt.figure()
+    plt.figure(figsize=(8, 6))
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+
