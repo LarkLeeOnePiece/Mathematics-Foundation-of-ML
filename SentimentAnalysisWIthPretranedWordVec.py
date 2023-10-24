@@ -58,7 +58,8 @@ print(f"Test_X.size()={Test_X.size()},Test_y.size()={Test_y.size()}")#X.size()=t
 # create dataloader. See https://pytorch.org/tutorials/beginner/basics/data_tutorial.html
 dataset = TensorDataset(X, y)
 train_dataloader = DataLoader(dataset, batch_size=512, shuffle=True)
-
+test_dataset = TensorDataset(Test_X, Test_y)
+test_dataloader = DataLoader(test_dataset, batch_size=len(test_dataset), shuffle=False)
 
 # build the embedding matrix for our vocabulary, from pretrained word vectors, in fact, I don't need to build the embedding, I can just use the existing embedding
 def build_embedding(vocab, vectors):
@@ -81,7 +82,7 @@ def average_review(data,embedding):
         averageVec.append(average_word_embeddings(review,embedding))
     return torch.stack(averageVec,dim=0)
     
-
+"""
 ## testx_vec=average_word_embeddings(X[0],W)#print(f"testx_vec.size={testx_vec.size()}")#prediction is [1,50] for each review, for total train data, it should be 25000*50
 avergaeX=average_review(X,W)#print(f"avergaeX.size={avergaeX.size()}")#prediction is [1,50] for each review, for total train data, it should be 25000*50
 avergeTestX=average_review(Test_X,W)
@@ -111,9 +112,53 @@ plt.xlabel('Epochs')
 plt.ylabel('loss')
 plt.legend()
 # here I test my own neural network
+"""
 
+def TrainingLoop(model,train_data):
+    # Load your training and testing data, and apply text_transform to convert text to indices
+    # Initialize the model and other hyperparameters
+    learning_rate = 0.001
+    num_epochs = 200
+    print("Start training:")
+    criterion = nn.BCEWithLogitsLoss()  # Binary Cross-Entropy Loss
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # Training loop
+    train_losses = []
+    for epoch in range(num_epochs):
+        for data, labels in train_data:  # You'll need to adapt this to your data loading setup
+            optimizer.zero_grad()
+            outputs = model(data)
+            #print("outputs.dtye=",outputs.dtype)
+            outputs = outputs.view(-1)
+            #print("labels.dtye=",labels.dtype)
+            loss = criterion(outputs, labels.float())
+            loss.backward()
+            optimizer.step()
+        if(epoch%20==0):
+            print(f"{epoch}/{num_epochs},losses:{loss.item()}")
+        train_losses.append(loss.item())
 
-
+    return model,train_losses
+    # Print or log the loss for monitoring
+def ValidFn(model,test_data):
+    # Testing loop
+    correct = 0
+    total = 0
+    predicted=[]
+    with torch.no_grad():
+        for data, labels in test_data:  # Adjust this to your test data
+            print(f"labels={labels.size()[0]}")
+            outputs = model(data)
+            outputs = outputs.view(-1)
+            predicted = (outputs > 0.5).float()  # Convert to 0 or 1 based on a threshold
+            print(f"predicted.size={predicted.size()}")
+            total += labels.size()[0]
+            #print("predicted == labels=",predicted == labels)
+            correct += (predicted == labels).sum().item()
+    print(f"correct={correct},total={total}")
+    accuracy = 100 * correct / total
+    print('Accuracy on test data: {}%'.format(accuracy))
+    return predicted
 # define the neural network
 class MLP(nn.Module):
   def __init__(self):
@@ -134,7 +179,21 @@ class MLP(nn.Module):
     return x
   
 model = MLP()
-
+_, trainingloss=TrainingLoop(model,train_dataloader)
+pred_y=ValidFn(model,test_dataloader)
+confusion = confusion_matrix(Test_y, pred_y)
+print("Confusion Matrix:")
+print(confusion)
+# classes label
+class_labels = ["Class 1", "Class 2"]
+# 绘制混淆矩阵
+plot_confusion_matrix(confusion, classes=class_labels, title='Confusion Matrix', normalize=False)
+# Plot the loss versus the number of training epochs.
+plt.figure()
+plt.plot(range(len(trainingloss)), trainingloss, label='Training Loss')
+plt.xlabel('Epochs')
+plt.ylabel('loss')
+plt.legend()
 summary(model, input_size=([10, 256,]))
 
 plt.show()
